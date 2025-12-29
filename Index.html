@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>झाँसी केसर दल - प्रो सनातनी कार्ड</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src='https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js'></script>
+
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; background-color: #f4f4f4; padding-bottom: 80px; }
+        .header { background: linear-gradient(135deg, #ff9933, #ff6600); color: white; padding: 15px; text-align: center; position: sticky; top: 0; z-index: 100; }
+        .container { padding: 15px; display: none; animation: fadeIn 0.4s; }
+        .active-page { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .btn { background: #ff6600; color: white; border: none; padding: 12px; border-radius: 25px; width: 100%; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .btn:disabled { background: #ccc !important; cursor: not-allowed; }
+        input, select, textarea { width: 95%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; }
+        
+        /* ID Card Design */
+        .id-capture-wrapper { background: white; padding: 15px; display: inline-block; border: 1px solid #ddd; }
+        .id-card-box { width: 380px; height: 230px; background: #fff5e6; border: 3px solid #ff4500; border-radius: 12px; position: relative; overflow: hidden; margin-bottom: 15px; }
+        .aadhaar-header { background: #ff4500; color: white; padding: 10px; text-align: center; font-weight: bold; }
+        .aadhaar-body { display: flex; padding: 15px; background: white; height: 160px; position: relative; }
+        .watermark-bg { position: absolute; opacity: 0.15; width: 65%; left: 17.5%; top: 15%; z-index: 0; pointer-events: none; }
+        .id-photo { width: 105px; height: 130px; border: 2px solid #ff4500; object-fit: cover; border-radius: 8px; z-index: 1; }
+        .aadhaar-info { flex: 1; padding-left: 15px; z-index: 1; text-align: left; }
+        .aadhaar-info b { font-size: 10px; color: #555; display: block; }
+        .aadhaar-info span { font-size: 14px; font-weight: bold; display: block; margin-bottom: 4px; }
+        .aadhaar-footer { background: #ff4500; color: white; text-align: center; padding: 8px; font-weight: bold; position: absolute; bottom: 0; width: 100%; }
+
+        /* Legal Box */
+        .rules-box { width: 380px; background: #fff; border: 2px solid #ff4500; border-radius: 12px; padding: 15px; text-align: left; font-size: 11px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="header"><h1>झाँसी केसर दल</h1></div>
+
+    <div id="join-page" class="container active-page">
+        <div class="card">
+            <h2>सदस्यता पंजीकरण</h2>
+            <button class="btn" style="background:#4285F4;" onclick="loginWithGoogle()" id="googleLoginBtn">G Google Login</button>
+            <label>अपना दल चुनें:</label>
+            <select id="userOrgSelect">
+                <option value="झाँसी केसर दल">झाँसी केसर दल</option>
+                <option value="बजरंग दल">बजरंग दल</option>
+            </select>
+            <input type="text" id="userName" placeholder="पूरा नाम">
+            <input type="text" id="userEmail" placeholder="Email (Login से भरेगा)" disabled>
+            <input type="text" id="fatherName" placeholder="पिता का नाम">
+            <textarea id="userAddress" placeholder="पूरा पता"></textarea>
+            <input type="date" id="dob">
+            
+            <div style="border: 2px dashed #999; padding: 10px; text-align: center;" onclick="document.getElementById('photoInput').click()">📷 अपनी फोटो चुनें</div>
+            <input type="file" id="photoInput" style="display: none;" onchange="compressAndPreview(this, 'photoPreview')">
+            <img id="photoPreview" style="width:100px; height:120px; display:none; margin: 10px auto;">
+
+            <div style="border: 2px dashed #999; padding: 10px; margin-top: 10px; text-align: center;" onclick="document.getElementById('docInput').click()">📑 सरकारी प्रमाण (आधार/PAN)</div>
+            <input type="file" id="docInput" style="display: none;" onchange="validateGovtDocument(this)">
+            <p id="docStatus" style="font-size: 11px; text-align: center; font-weight: bold;"></p>
+
+            <button class="btn" id="submitBtn" onclick="generateUserID()" disabled>ID कार्ड सुरक्षित करें 🔒</button>
+        </div>
+    </div>
+
+    <div id="id-page" class="container">
+        <div style="text-align: center;">
+            <div id="captureArea" class="id-capture-wrapper">
+                <div class="id-card-box">
+                    <div class="aadhaar-header">🚩 सनातनी कार्ड - <span id="displayOrgFront">झाँसी केसर दल</span> 🚩</div>
+                    <div class="aadhaar-body">
+                        <img src="icon.jpg" class="watermark-bg">
+                        <img id="cardPhoto" src="" class="id-photo">
+                        <div class="aadhaar-info">
+                            <b>Name</b><span id="cardName">...</span>
+                            <b>Father</b><span id="cardFather">...</span>
+                            <b>DOB</b><span id="cardDOB">...</span>
+                            <b style="margin-top:5px;">ID: <span id="cardIdNumber" style="color:red;">...</span></b>
+                        </div>
+                        <img id="cardQR" src="" style="width: 60px; height: 60px; align-self: flex-end;">
+                    </div>
+                    <div class="aadhaar-footer">मेरा सनातन मेरी पहचान 🚩</div>
+                </div>
+
+                <div class="id-card-box">
+                    <div class="aadhaar-header">ADDRESS DETAILS</div>
+                    <div class="aadhaar-body" style="flex-direction: column; justify-content: center;">
+                        <img src="icon.jpg" class="watermark-bg">
+                        <div style="z-index: 1; padding: 0 10px; text-align: left;">
+                            <b>Permanent Address:</b><p id="cardAddress" style="font-size: 13px; margin: 3px 0; font-weight: 600;">...</p>
+                            <br>
+                            <b>Email:</b><p id="cardEmail" style="font-size: 12px; margin: 3px 0;">...</p>
+                        </div>
+                    </div>
+                    <div class="aadhaar-footer" style="font-size: 12px;">jhansi-kesari-dal.web.app</div>
+                </div>
+            </div>
+        </div>
+        <button class="btn" onclick="downloadID()" style="background:#333;">⬇️ ID डाउनलोड करें</button>
+        <button class="btn" style="background:#fff; color:#333; border:1px solid #ccc; margin-top:10px;" onclick="switchTab('join-page')">वापस</button>
+    </div>
+
+    <script>
+        // फायरबेस कॉन्फ़िगरेशन
+        const firebaseConfig = { apiKey: "AIzaSyDPHcufGQsK_-i37FEKrlZgHq_bl8WCH90", authDomain: "jhansi-kesari-dal.firebaseapp.com", projectId: "jhansi-kesari-dal", storageBucket: "jhansi-kesari-dal.firebasestorage.app", messagingSenderId: "170440159668", appId: "1:170440159668:web:8798c72e4e6d5b7a2dc2e1" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        var photoData = "", docValidFlag = false;
+
+        function switchTab(p) { document.querySelectorAll('.container').forEach(c => c.classList.remove('active-page')); document.getElementById(p).classList.add('active-page'); }
+
+        // --- डुप्लीकेट आईडी रोकथाम लॉजिक ---
+        async function generateUserID() {
+            var n = document.getElementById('userName').value.trim();
+            var f = document.getElementById('fatherName').value.trim();
+            var dob = document.getElementById('dob').value;
+            var org = document.getElementById('userOrgSelect').value;
+
+            // डेटाबेस में चेक करें: क्या यह व्यक्ति पहले से है?
+            const qs = await db.collection("members")
+                .where("name", "==", n)
+                .where("father", "==", f)
+                .where("dob", "==", dob).get();
+
+            if (!qs.empty) {
+                alert("आपकी ID पहले से बनी है! पुरानी ID दिखाई जा रही है। ✅");
+                setupCard(qs.docs[0].data());
+                return;
+            }
+
+            // नया ID बनाना
+            const rid = "SAN-" + (Math.floor(Math.random() * 900000) + 100000);
+            const data = { id: rid, name: n, father: f, dob: dob, photo: photoData, organization: org, address: document.getElementById('userAddress').value, email: document.getElementById('userEmail').value };
+            
+            await db.collection("members").doc(rid).set(data);
+            setupCard(data);
+        }
+
+        // --- Undefined नाम फिक्स ---
+        function setupCard(d) {
+            document.getElementById('cardName').innerText = d.name;
+            document.getElementById('cardFather').innerText = d.father;
+            document.getElementById('cardDOB').innerText = d.dob;
+            document.getElementById('cardIdNumber').innerText = d.id;
+            document.getElementById('cardPhoto').src = d.photo;
+            document.getElementById('cardAddress').innerText = d.address || "N/A";
+            document.getElementById('cardEmail').innerText = d.email || "N/A";
+            document.getElementById('displayOrgFront').innerText = d.organization || "झाँसी केसर दल";
+            document.getElementById('cardQR').src = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=ID:${d.id}`;
+            switchTab('id-page');
+        }
+
+        function loginWithGoogle() { var p = new firebase.auth.GoogleAuthProvider(); firebase.auth().signInWithPopup(p).then((r) => { document.getElementById('userName').value = r.user.displayName; document.getElementById('userEmail').value = r.user.email; document.getElementById('googleLoginBtn').style.display = 'none'; checkSubmitAbility(); }); }
+        async function validateGovtDocument(input) { if (!input.files[0]) return; Tesseract.recognize(input.files[0], 'eng+hin').then(({ data: { text } }) => { if (text.toLowerCase().includes("india") || text.toLowerCase().includes("आधार")) { docValidFlag = true; document.getElementById('docStatus').innerText = "✅ मान्य दस्तावेज़"; checkSubmitAbility(); } else { alert("अमान्य दस्तावेज़!"); } }); }
+        function compressAndPreview(input, pId) { var reader = new FileReader(); reader.onload = function(e) { photoData = e.target.result; document.getElementById(pId).src = photoData; document.getElementById(pId).style.display = 'block'; checkSubmitAbility(); }; reader.readAsDataURL(input.files[0]); }
+        function checkSubmitAbility() { if (docValidFlag && photoData !== "") document.getElementById('submitBtn').disabled = false; }
+        function downloadID() { html2canvas(document.getElementById('captureArea'), { scale: 3, useCORS: true }).then(canvas => { var link = document.createElement('a'); link.download = 'JKD_Member_ID.png'; link.href = canvas.toDataURL(); link.click(); }); }
+    </script>
+</body>
+</html>
